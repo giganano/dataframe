@@ -10,7 +10,7 @@ Implements the dataframe base functionality.
 #include "dataframe.src.h"
 
 static signed short column_index(DATAFRAME df, const char *label);
-static unsigned long integer_sum(const unsigned long *input,
+static unsigned long integer_sum(const unsigned short *input,
 	const unsigned long length);
 
 /*
@@ -149,6 +149,49 @@ extern double *dataframe_get_row(DATAFRAME df, const unsigned long index) {
 
 
 /*
+The equivalent of ``dataframe_get_row`` above, but to be called from Python.
+In this case, a ``DATAFRAME`` object with the labels preserved must be returned.
+
+Parameters
+----------
+input : ``DATAFRAME``
+	The original dataframe, passed down from Python.
+output : ``DATAFRAME *``
+	The dataframe to store the output in. If ``NULL``, a new one will be
+	created automatically.
+index : ``const unsigned long``
+	The integer index (zero-based) of the desired row number.
+
+Returns
+-------
+output : ``DATAFRAME *``
+	The single-row dataframe containing input.data[index] as the sole entry.
+*/
+extern DATAFRAME *dataframe_getitem_integer(DATAFRAME input, DATAFRAME *output,
+	const unsigned long index) {
+
+	if (output != NULL) dataframe_free(output);
+	output = dataframe_empty();
+
+	output -> data = (double **) malloc (sizeof(double *));
+	output -> data[0] = dataframe_get_row(input, index);
+	output -> labels = (char **) malloc (input.n_labels * sizeof(char *));
+	output -> n_labels = input.n_labels;
+	output -> n_entries = 1ul;
+	output -> n_threads = input.n_threads;
+
+	for (unsigned short i = 0u; i < (*output).n_labels; i++) {
+		output -> labels[i] = (char *) malloc (MAX_LABEL_SIZE * sizeof(char));
+		memset(output -> labels[i], '\0', MAX_LABEL_SIZE);
+		strcpy(output -> labels[i], input.labels[i]);
+	}
+
+	return output;
+
+}
+
+
+/*
 Assign new values to a given row of the dataframe.
 
 Parameters
@@ -219,7 +262,7 @@ copy : ``double *``
 	A pointer with the corresponding data copied over. NULL if ``label`` does
 	not match any of the strings in ``df.labels``.
 */
-extern double *dataframe_get_column(DATAFRAME df, const char *label) {
+extern double *dataframe_getitem_column(DATAFRAME df, const char *label) {
 
 	signed short index = column_index(df, label);
 	if (index >= 0 && index < df.n_labels) {
@@ -400,10 +443,15 @@ Parameters
 ----------
 df : ``DATAFRAME``
 	The input dataframe to subsample from.
+output : ``DATAFRAME *``
+	The dataframe to store the output in. If ``NULL``, a new one will be
+	created automatically.
 start : ``unsigned long``
 	The starting row number of the subsample.
 stop : ``unsigned long``
 	The stopping row number of the subsample.
+step : ``unsigned short``
+	The stepsize to take in slicing from start to stop.
 
 Returns
 -------
@@ -411,32 +459,52 @@ slice : ``DATAFRAME *``
 	A subsample of the input dataframe, containing the rows from ``start`` to
 	``stop - 1`` (inclusive).
 */
-extern DATAFRAME *dataframe_slice(DATAFRAME df, const unsigned long start,
-	const unsigned long stop) {
+extern DATAFRAME *dataframe_getitem_slice(DATAFRAME df, DATAFRAME *output,
+	unsigned long start, unsigned long stop, unsigned short step) {
 
-	unsigned long *indeces;
-	unsigned long n_entries;
-	if (start < stop) {
-		n_entries = stop - start;
-		indeces = (unsigned long *) malloc (n_entries * sizeof(unsigned long));
-		for (unsigned long i = start; i < stop; i++) {
-			indeces[i - start] = i;
+	if (!step) return NULL;
+	if (-df.n_entries <= start && start < 0) start += df.n_entries;
+	if (-df.n_entries <= stop && stop < 0) stop += df.n_entries;
+	if (start < 0 || stop < 0 ||
+		start >= df.n_entries || stop >= df.n_entries) return NULL;
+
+	unsigned long n = 0ul, *indeces;
+
+	if (start <= stop && step > 0) {
+		if (output != NULL) dataframe_free(output);
+		unsigned long idx = start;
+		while (idx < stop) {
+			if (n) {
+				indeces = (unsigned long *) realloc (indeces,
+					(n + 1ul) * sizeof(unsigned long));
+			} else {
+				indeces = (unsigned long *) malloc (sizeof(unsigned long));
+			}
+			indeces[n++] = idx;
+			idx += step;
 		}
-	} else if (start == stop) {
-		n_entries = 1ul;
-		indeces = (unsigned long *) malloc (sizeof(unsigned long));
-		indeces[0] = start;
+		output = dataframe_take(df, indeces, n);
+	} else if (start <= stop && step < 0) {
+		if (output != NULL) dataframe_free(output);
+		unsigned long idx = start;
+		while (idx > start) {
+			if (n) {
+				indeces = (unsigned long *) realloc (indeces,
+					(n + 1ul) * sizeof(unsigned long));
+			} else {
+				indeces = (unsigned long *) malloc (sizeof(unsigned long));
+			}
+			indeces[n++] = idx;
+			idx -= step;
+		}
+		output = dataframe_take(df, indeces, n);
+	} else if (start > stop) {
+		return dataframe_getitem_slice(df, output, stop, start, -step);
 	} else {
-		n_entries = start - stop;
-		indeces = (unsigned long *) malloc (n_entries * sizeof(unsigned long));
-		for (unsigned long i = stop; i > start; i--) {
-			indeces[stop - i] = i;
-		}
+		return NULL;
 	}
 
-	DATAFRAME *slice = dataframe_take(df, indeces, n_entries);
-	free(indeces);
-	return slice;
+	return output;
 
 }
 
@@ -448,6 +516,9 @@ Parameters
 ----------
 df : ``DATAFRAME``
 	The input, unfiltered dataframe.
+output : ``DATAFRAME *``
+	The dataframe to store the output in. If ``NULL``, a new one will be
+	created automatically.
 label : ``char *``
 	The string label denoting the quantity to filter the sample based on.
 condition : ``char[2]``
@@ -459,13 +530,13 @@ value : ``double``
 
 Returns
 -------
-filtered : ``DATAFRAME *``
+output : ``DATAFRAME *``
 	A subsample of the input data, where each data vector satisfies the
 	requirement ``df.data[row][label_index] condition value``. NULL if the
 	column label is not recognized or the condition is invalid.
 */
-extern DATAFRAME *dataframe_filter(DATAFRAME df, char *label, char condition[2],
-	double value) {
+extern DATAFRAME *dataframe_filter(DATAFRAME df, DATAFRAME *output, char *label,
+	char condition[2], double value) {
 
 	static unsigned short flag = 0u;
 
@@ -519,17 +590,18 @@ extern DATAFRAME *dataframe_filter(DATAFRAME df, char *label, char condition[2],
 		return NULL;
 	} else {}
 
-	unsigned long n_pass = integer_sum( (unsigned long *) accept, df.n_entries);
+	unsigned long n_pass = integer_sum(accept, df.n_entries);
 	unsigned long n = 0ul, *indeces = (unsigned long *) malloc (n_pass *
 		sizeof(unsigned long));
 	for (unsigned long i = 0ul; i < df.n_entries; i++) {
 		if (accept[i]) indeces[n++] = i;
 	}
 
-	DATAFRAME *filtered = dataframe_take(df, indeces, n_pass);
+	if (output != NULL) dataframe_free(output);
+	output = dataframe_take(df, indeces, n_pass);
 	free(accept);
 	free(indeces);
-	return filtered;
+	return output;
 
 }
 
@@ -549,11 +621,13 @@ Returns
 sum : ``unsigned long``
 	The additive sum of each element of ``input``.
 */
-static unsigned long integer_sum(const unsigned long *input,
+static unsigned long integer_sum(const unsigned short *input,
 	const unsigned long length) {
 
 	unsigned long sum = 0ul;
-	for (unsigned long i = 0ul; i < length; i++) sum += input[i];
+	for (unsigned long i = 0ul; i < length; i++) {
+		sum += input[i];
+	}
 	return sum;
 
 }

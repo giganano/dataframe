@@ -1,6 +1,6 @@
 # cython: language_level = 3, boundscheck = False
 
-cdef extern from "dataframe.src.h":
+cdef extern from "./dataframe.src.h":
 
 	unsigned short MAX_LABEL_SIZE
 
@@ -16,14 +16,18 @@ cdef extern from "dataframe.src.h":
 		const unsigned short n_threads)
 	DATAFRAME *dataframe_empty()
 	void dataframe_free(DATAFRAME *df)
+	double *dataframe_getitem_column(DATAFRAME df, const char *label)
+	DATAFRAME *dataframe_getitem_integer(DATAFRAME input, DATAFRAME *output,
+		const unsigned long index)
+	DATAFRAME *dataframe_getitem_slice(DATAFRAME input, DATAFRAME *output,
+		unsigned long start, unsigned long stop, unsigned short step)
+	DATAFRAME *dataframe_filter(DATAFRAME df, DATAFRAME *output, char *label,
+		char condition[2], double value)
+
+
 	double *dataframe_get_row(DATAFRAME df, const unsigned long index)
-	double *dataframe_get_column(DATAFRAME df, const char *label)
 	DATAFRAME *dataframe_take(DATAFRAME df, const unsigned long *indeces,
 		const unsigned long n_indeces)
-	DATAFRAME *dataframe_slice(DATAFRAME df, const unsigned long start,
-		const unsigned long stop)
-	DATAFRAME *dataframe_filter(DATAFRAME df, char *label, char condition[2],
-		double value)
 
 
 cdef class _dataframe:

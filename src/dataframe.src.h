@@ -80,6 +80,28 @@ Free up the memory associated with a ``DATAFRAME`` object.
 extern void dataframe_free(DATAFRAME *df);
 
 /*
+The equivalent of ``dataframe_get_row`` above, but to be called from Python.
+In this case, a ``DATAFRAME`` object with the labels preserved must be returned.
+
+Parameters
+----------
+input : ``DATAFRAME``
+	The original dataframe, passed down from Python.
+output : ``DATAFRAME *``
+	The dataframe to store the output in. If ``NULL``, a new one will be
+	created automatically.
+index : ``const unsigned long``
+	The integer index (zero-based) of the desired row number.
+
+Returns
+-------
+output : ``DATAFRAME *``
+	The single-row dataframe containing input.data[index] as the sole entry.
+*/
+extern DATAFRAME *dataframe_getitem_integer(DATAFRAME input, DATAFRAME *output,
+	const unsigned long index);
+
+/*
 Get a copy of a "row" from the dataframe.
 
 Parameters
@@ -140,7 +162,7 @@ copy : ``double *``
 	A pointer with the corresponding data copied over. NULL if ``label`` does
 	not match any of the strings in ``df.labels``.
 */
-extern double *dataframe_get_column(DATAFRAME df, const char *label);
+extern double *dataframe_getitem_column(DATAFRAME df, const char *label);
 
 /*
 Assign new values to a given column of the dataframe.
@@ -196,6 +218,8 @@ start : ``unsigned long``
 	The starting row number of the subsample.
 stop : ``unsigned long``
 	The stopping row number of the subsample.
+step : ``unsigned short``
+	The stepsize to take in slicing from start to stop.
 
 Returns
 -------
@@ -203,8 +227,8 @@ slice : ``DATAFRAME *``
 	A subsample of the input dataframe, containing the rows from ``start`` to
 	``stop - 1`` (inclusive).
 */
-extern DATAFRAME *dataframe_slice(DATAFRAME df, const unsigned long start,
-	const unsigned long stop);
+extern DATAFRAME *dataframe_getitem_slice(DATAFRAME df, DATAFRAME *output,
+	unsigned long start, unsigned long stop, unsigned short step);
 
 /*
 Filter the dataframe based on some condition applied to a particular column.
@@ -213,6 +237,9 @@ Parameters
 ----------
 df : ``DATAFRAME``
 	The input, unfiltered dataframe.
+output : ``DATAFRAME *``
+	The dataframe to store the output in. If ``NULL``, a new one will be
+	created automatically.
 label : ``char *``
 	The string label denoting the quantity to filter the sample based on.
 condition : ``char[2]``
@@ -224,13 +251,13 @@ value : ``double``
 
 Returns
 -------
-filtered : ``DATAFRAME *``
+output : ``DATAFRAME *``
 	A subsample of the input data, where each data vector satisfies the
 	requirement ``df.data[row][label_index] condition value``. NULL if the
 	column label is not recognized or the condition is invalid.
 */
-extern DATAFRAME *dataframe_filter(DATAFRAME df, char *label, char condition[2],
-	double value);
+extern DATAFRAME *dataframe_filter(DATAFRAME df, DATAFRAME *output, char *label,
+	char condition[2], double value);
 
 #ifdef __cplusplus
 }

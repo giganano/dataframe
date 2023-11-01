@@ -1,21 +1,22 @@
 
 from setuptools import setup, Extension
+import os
 
-if __name__ == "__main__":
-	setup(ext_modules = [Extension("src.dataframe",
-		["./src/dataframe.pyx", "./src/dataframe.src.c"])])
+def compile_extensions():
+	cwd = os.getcwd()
+	# os.chdir("%s/src" % (os.path.dirname(os.path.abspath(__file__))))
+	os.chdir(os.path.dirname(os.path.abspath(__file__)))
+	os.system("mkdir tmp")
+	os.system("mv __init__.py ./tmp")
+	try:
+		setup(ext_modules = [Extension("src.dataframe",
+			["src/dataframe.pyx", "src/dataframe.src.c"])])
+	finally:
+		os.chdir(cwd)
+		os.system("mv ./tmp/__init__.py .")
+		os.system("rm -rf ./tmp")
 
-	# extensions = []
-	# for root, dirs, files in os.walk(path):
-	# 	for i in files:
-	# 		if i.endswith(".pyx"):
-	# 			# The name of the extension
-	# 			name = "%s.%s" % (root[2:].replace('/', '.'),
-	# 				i.split('.')[0])
-	# 			# The source files in the C library
-	# 			src_files = ["%s/%s" % (root[2:], i)]
-	# 			src_files += vice.find_c_extensions(name)
-	# 			extensions.append(Extension(name, src_files))
-	# 		else: continue
-	# return extensions
+if __name__ == "__main__": compile_extensions()
+	# setup(ext_modules = [Extension("src.dataframe",
+	# 	["./src/dataframe.pyx", "./src/dataframe.src.c"])])
 

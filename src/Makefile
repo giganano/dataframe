@@ -19,6 +19,7 @@ endif
 
 .PHONY: clean
 clean:
+	@ rm -rf __pycache__
 	@ for i in $(OUTPUTS) ; do \
 		rm -f $$i ; \
 	done
