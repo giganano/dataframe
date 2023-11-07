@@ -17,10 +17,14 @@ cdef extern from "./dataframe.src.h":
 	DATAFRAME *dataframe_empty()
 	void dataframe_free(DATAFRAME *df)
 	double *dataframe_getitem_column(DATAFRAME df, const char *label)
-	DATAFRAME *dataframe_getitem_integer(DATAFRAME input, DATAFRAME *output,
-		const unsigned long index)
+	# DATAFRAME *dataframe_getitem_integer(DATAFRAME input, DATAFRAME *output,
+	# 	const unsigned long index)
 	DATAFRAME *dataframe_getitem_slice(DATAFRAME input, DATAFRAME *output,
 		unsigned long start, unsigned long stop, unsigned short step)
+	unsigned short dataframe_assign_row(DATAFRAME *df, unsigned long index,
+		char **labels, double *new_values, unsigned short n_values)
+	unsigned short dataframe_assign_column(DATAFRAME *df, char *label,
+		double *new_values, unsigned long length)
 	DATAFRAME *dataframe_filter(DATAFRAME df, DATAFRAME *output, char *label,
 		char condition[2], double value)
 

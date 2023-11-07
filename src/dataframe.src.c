@@ -148,6 +148,7 @@ extern double *dataframe_get_row(DATAFRAME df, const unsigned long index) {
 }
 
 
+#if 0
 /*
 The equivalent of ``dataframe_get_row`` above, but to be called from Python.
 In this case, a ``DATAFRAME`` object with the labels preserved must be returned.
@@ -189,6 +190,7 @@ extern DATAFRAME *dataframe_getitem_integer(DATAFRAME input, DATAFRAME *output,
 	return output;
 
 }
+#endif
 
 
 /*
@@ -466,7 +468,7 @@ extern DATAFRAME *dataframe_getitem_slice(DATAFRAME df, DATAFRAME *output,
 	if (-df.n_entries <= start && start < 0) start += df.n_entries;
 	if (-df.n_entries <= stop && stop < 0) stop += df.n_entries;
 	if (start < 0 || stop < 0 ||
-		start >= df.n_entries || stop >= df.n_entries) return NULL;
+		start >= df.n_entries || stop > df.n_entries) return NULL;
 
 	unsigned long n = 0ul, *indeces;
 

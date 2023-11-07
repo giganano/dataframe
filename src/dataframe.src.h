@@ -79,6 +79,7 @@ Free up the memory associated with a ``DATAFRAME`` object.
 */
 extern void dataframe_free(DATAFRAME *df);
 
+#if 0
 /*
 The equivalent of ``dataframe_get_row`` above, but to be called from Python.
 In this case, a ``DATAFRAME`` object with the labels preserved must be returned.
@@ -100,6 +101,7 @@ output : ``DATAFRAME *``
 */
 extern DATAFRAME *dataframe_getitem_integer(DATAFRAME input, DATAFRAME *output,
 	const unsigned long index);
+#endif
 
 /*
 Get a copy of a "row" from the dataframe.

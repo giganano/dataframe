@@ -37,6 +37,10 @@ cdef class _dataframe:
 		dataframe_free(self._df)
 
 
+	def __len__(self):
+		return int(self._df[0].n_entries)
+
+
 	def __repr__(self):
 		rep = "dataframe{\n"
 		for key in self.keys():
@@ -58,36 +62,38 @@ cdef class _dataframe:
 
 
 	def __getitem__(self, key):
-		cdef double *column
+		cdef double *arr
 		cdef char *key_copy
-		cdef _dataframe rows
 		if isinstance(key, str):
 			key_copy = <char *> malloc (MAX_LABEL_SIZE * sizeof(char))
 			memset(key_copy, <char> 0, MAX_LABEL_SIZE)
 			for i in range(len(key)): key_copy[i] = <char> ord(key[i])
 			try:
-				column = dataframe_getitem_column(self._df[0], key_copy)
+				arr = dataframe_getitem_column(self._df[0], key_copy)
 			finally:
 				free(key_copy)
-			if column is NULL: raise KeyError(
+			if arr is NULL: raise KeyError(
 				"Unrecognized dataframe key: \"%s\"" % (key))
 			try:
-				result = [float(column[i]) for i in range(self._df[0].n_entries)]
+				result = [float(arr[i]) for i in range(self._df[0].n_entries)]
 			finally:
-				free(column)
+				free(arr)
 			return result
 		elif isinstance(key, numbers.Number) and key % 1 == 0:
 			key = int(key)
-			if -self._df[0].n_entries <= key < 0:
+			if -int(self._df[0].n_entries) <= key < 0:
 				key += self._df[0].n_entries
 			elif key < 0 or key >= self._df[0].n_entries:
 				raise IndexError("""\
 Integer index out of bounds for dataframe of size %d: %d""" % (
 					self._df[0].n_entries, key))
 			else: pass
-			rows = _dataframe({"dummy": [1]})
-			rows._df = dataframe_getitem_integer(self._df[0], rows._df, key)
-			return rows
+			arr = dataframe_get_row(self._df[0], key)
+			try:
+				result = [float(arr[i]) for i in range(self._df[0].n_labels)]
+			finally:
+				free(arr)
+			return dict(zip(self.keys(), result))
 		elif isinstance(key, slice):
 			start = key.start if key.start is not None else 0
 			stop = key.stop if key.stop is not None else self._df[0].n_entries
@@ -102,6 +108,110 @@ Integer index out of bounds for dataframe of size %d: %d""" % (
 		else:
 			raise TypeError("Index must be of type str or int. Got: %s" % (
 				type(key)))
+
+
+	def __setitem__(self, key, value):
+		cdef char *key_copy
+		cdef double *value_copy
+		cdef char **key_copies
+		if isinstance(key, str):
+			key_copy = <char *> malloc (MAX_LABEL_SIZE * sizeof(char))
+			memset(key_copy, <char> 0, MAX_LABEL_SIZE)
+			for i in range(len(key)): key_copy[i] = <char> ord(key[i])
+			value_copy = <double *> malloc (len(value) * sizeof(double))
+			for i in range(len(value)): value_copy[i] = value[i]
+			try:
+				if dataframe_assign_column(self._df, key_copy, value_copy,
+					len(value)): raise ValueError("""\
+Array length mismatch. Dataframe length: %d. \
+Got: %d""" % (self._df[0].n_entries, len(value)))
+			finally:
+				free(key_copy)
+				free(value_copy)
+		elif isinstance(key, numbers.Number) and key % 1 == 0:
+			key = int(key)
+			if -int(self._df[0].n_entries) <= key < 0:
+				key += self._df[0].n_entries
+			elif key < 0 or key > self._df[0].n_entries:
+				raise IndexError("""\
+Index out of bounds for dataframe of size %d.\
+Got: %d""" % (self._df[0].n_entries, key))
+			else: pass
+			if not isinstance(value, dict): raise TypeError("""\
+Must be of type dict. Got: %s""" % (type(value)))
+			value_keys = list(value.keys())
+			key_copies = <char **> malloc (len(value_keys) * sizeof(char *))
+			for i in range(len(value_keys)):
+				key_copies[i] = <char *> malloc (MAX_LABEL_SIZE * sizeof(char))
+				memset(key_copies[i], <char> 0, MAX_LABEL_SIZE)
+				for j in range(len(value_keys[i])):
+					key_copies[i][j] = <char> ord(value_keys[i][j])
+			value_copy = <double *> malloc (len(value_keys) * sizeof(double))
+			for i in range(len(value_keys)): value_copy[i] = value[value_keys[i]]
+			try:
+				flag = dataframe_assign_row(self._df, key, key_copies,
+					value_copy, len(value_keys))
+			finally:
+				free(key_copies)
+				free(value_copy)
+			if flag == 1:
+				raise ValueError("Unrecognized column label.")
+			elif flag == 2:
+				raise IndexError("""\
+Index out of bounds for dataframe of size %d.\
+Got: %d""" % (self._df[0].n_entries, key))
+			else: pass
+		elif isinstance(key, tuple):
+			if len(key) != 2: raise ValueError("""\
+Single item assignment must proceed with a key-integer pair.\
+Got %d indeces.""" % (len(key)))
+			integers = [isinstance(_,
+				numbers.Number) and _ % 1 == 0 for _ in key]
+			strings = [isinstance(_, str) for _ in key]
+			if not sum(integers) == 1 and sum(strings) == 1:
+				raise ValueError("""\
+Single item assignment must proceed with a key-integer pair.""")
+			else: pass
+			if isinstance(key[0], numbers.Number):
+				index = key[0]
+				label = key[1]
+			else:
+				index = key[1]
+				label = key[0]
+			self.__setitem__(index, {label: value})
+
+
+	@property
+	def size(self):
+		r"""
+		Type : ``tuple``
+
+		The number of elements stored in the dataframe. Zero'th element is the
+		number of data vectors stored, and the first is the number of keys.
+		"""
+		return (self._df[0].n_entries, self._df[0].n_labels)
+
+
+	@property
+	def n_threads(self):
+		r"""
+		Type : ``int``
+
+		The number of openMP threads to use. Impacts the actual number of
+		threads used only if the openMP library was linked at compile time.
+		"""
+		return self._df[0].n_threads
+
+	@n_threads.setter
+	def n_threads(self, value):
+		if isinstance(value, numbers.Number) and value % 1 == 0:
+			value = int(value)
+			if value <= 0: raise ValueError("""\
+Number of openMP threads must be positive definite. Got: %s""" % (value))
+			self._df[0].n_threads = int(value)
+		else:
+			raise TypeError("""\
+Number of openMP threads must be an integer. Got: %s""" % (type(value)))
 
 
 	def keys(self):
